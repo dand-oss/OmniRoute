@@ -288,6 +288,9 @@ omniroute setup-codex --remote http://100.x.x.x:20128 --api-key sk-xxx
 # Preview without writing files
 omniroute setup-codex --remote http://100.x.x.x:20128 --dry-run
 
+# Also publish compatible OmniRoute models into Codex's model picker
+omniroute setup-codex --remote http://100.x.x.x:20128 --model-catalog
+
 # Only generate GLM and Kimi profiles
 omniroute setup-codex --only glm,kimi
 
@@ -296,6 +299,8 @@ omniroute setup-codex --codex-home /path/to/.codex
 ```
 
 The command fetches `/v1/models`, uses tuned profiles for known models, falls back to catalog metadata for other compatible text models, and writes `~/.codex/<name>.config.toml` for each. Idempotent — safe to re-run.
+
+With `--model-catalog`, the command also runs `codex debug models --bundled`, preserves every native Codex entry, and adds compatible OmniRoute text models to `~/.codex/omniroute-model-catalog.json`. It sets `model_catalog_json` in the root of `~/.codex/config.toml`; if you already have a different `model_catalog_json`, the command refuses to replace it. Fully quit and reopen Codex after generating the catalog. `--native-catalog <path>` can supply a captured bundled catalog when the `codex` binary cannot run directly (the binary path can also be set with `CLI_CODEX_BIN`).
 
 OmniRoute can also **auto-sync** these same profile files after a successful provider model discovery/import changes the live catalog. This is **opt-in and off by default**: toggle it from the **CLI Code dashboard** ("CLI profile auto-sync" → Codex), or set `OMNIROUTE_AUTO_SYNC_CODEX_PROFILES=true` (it also honors `CLI_ALLOW_CONFIG_WRITES`, on by default). When enabled it only writes separate `~/.codex/*.config.toml` profile files; it never changes the active/default `~/.codex/config.toml`, Codex-lb settings, auth, or provider selection.
 
