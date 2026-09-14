@@ -5,6 +5,8 @@
  * live model catalog via GET /v1/models, then generates ~/.codex/<name>.config.toml
  * profile files for each model — so you can switch providers with a single flag
  * (`codex --profile glm52`) without editing config files by hand.
+ * With --model-catalog, it also merges those models into Codex's bundled
+ * model_catalog_json so they appear in the normal model picker.
  *
  * Primary use-case: configure a local Codex CLI to use models from a VPS.
  *   omniroute setup-codex --remote http://100.67.86.91:20128 --api-key sk-xxx
@@ -12,12 +14,13 @@
  * The command is idempotent: re-running updates existing profile files in place.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 import { printHeading, printInfo, printSuccess, printError } from "../io.mjs";
 import { guardHostConfigTarget } from "../utils/config-home-guard.mjs";
 import { t } from "../i18n.mjs";
+import { captureCodexNativeCatalog, syncCodexModelCatalog } from "./codex-model-catalog.mjs";
 
 // ── Model categorisation ──────────────────────────────────────────────────────
 
@@ -295,7 +298,7 @@ export async function syncCodexProfilesFromModels(models, opts = {}) {
 // ── Command ───────────────────────────────────────────────────────────────────
 
 /**
- * @param {{remote?:string, port?:string, apiKey?:string, codexHome?:string, dryRun?:boolean, only?:string}} opts
+ * @param {{remote?:string, port?:string, apiKey?:string, codexHome?:string, dryRun?:boolean, only?:string, modelCatalog?:boolean, nativeCatalog?:string}} opts
  * @returns {Promise<number>}
  */
 export async function runSetupCodexCommand(opts = {}) {
@@ -304,6 +307,8 @@ export async function runSetupCodexCommand(opts = {}) {
   const apiKey = opts.apiKey ?? opts["api-key"] ?? process.env.OMNIROUTE_API_KEY ?? "";
   const codexHome = opts.codexHome ?? opts["codex-home"] ?? join(os.homedir(), ".codex");
   const dryRun = Boolean(opts.dryRun ?? opts["dry-run"]);
+  const modelCatalog = Boolean(opts.modelCatalog ?? opts["model-catalog"]);
+  const nativeCatalogPath = opts.nativeCatalog ?? opts["native-catalog"];
   const onlyFilter = opts.only ? opts.only.split(",").map((s) => s.trim()) : null;
 
   printHeading(`OmniRoute → Codex CLI profile generator`);
@@ -348,6 +353,25 @@ export async function runSetupCodexCommand(opts = {}) {
     only: opts.only,
   });
 
+  let catalogResult = null;
+  if (modelCatalog) {
+    try {
+      const nativeCatalog = nativeCatalogPath
+        ? JSON.parse(readFileSync(nativeCatalogPath, "utf8"))
+        : captureCodexNativeCatalog();
+      catalogResult = await syncCodexModelCatalog({
+        nativeCatalog,
+        models,
+        codexHome,
+        activate: true,
+        dryRun,
+      });
+    } catch (err) {
+      printError(`Failed to generate Codex model catalog: ${err.message}`);
+      return 1;
+    }
+  }
+
   if (!dryRun) {
     for (const profile of profiles) {
       printSuccess(`  ✓ ${profile.name}.config.toml  (${profile.model})`);
@@ -360,8 +384,23 @@ export async function runSetupCodexCommand(opts = {}) {
     console.log("\nTo use a profile:");
     console.log("  codex --profile <name>    # e.g. codex --profile glm52");
     console.log("  codex -p <name>           # short form");
+    if (catalogResult) {
+      console.log("");
+      printSuccess(`Codex model catalog: ${catalogResult.catalogPath}`);
+      printInfo(
+        `${catalogResult.added} OmniRoute models added beside ${catalogResult.models.length - catalogResult.added} native models`
+      );
+      if (catalogResult.activated) {
+        printInfo("Fully quit and reopen Codex so it reloads model_catalog_json.");
+      }
+    }
   } else {
     console.log(`\n[dry-run] ${written} profiles would be written (${skipped} skipped)`);
+    if (catalogResult) {
+      console.log(
+        `[dry-run] Codex model catalog would contain ${catalogResult.models.length} models (${catalogResult.added} OmniRoute)`
+      );
+    }
   }
 
   return 0;
@@ -389,6 +428,14 @@ export function registerSetupCodex(program) {
       "Comma-separated substrings — only generate profiles for matching model IDs (e.g. glm,kimi)"
     )
     .option("--dry-run", "Print what would be written without touching the filesystem")
+    .option(
+      "--model-catalog",
+      "Also generate a Codex model_catalog_json file and point config.toml at it"
+    )
+    .option(
+      "--native-catalog <path>",
+      "Read Codex's bundled models.json from a file instead of running codex debug models"
+    )
     .option(
       "--allow-container-write",
       "Write even when the target is inside a container and not mounted from the host"
