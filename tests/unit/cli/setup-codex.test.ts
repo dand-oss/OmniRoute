@@ -157,13 +157,13 @@ test("buildCodexModelCatalog preserves native templates and adds compatible Omni
   assert.match(routed.base_instructions, /based on GLM 5\.3\./);
 });
 
-test("buildCodexModelCatalog omits reasoning fields when no effort is known", () => {
+test("buildCodexModelCatalog publishes empty reasoning levels when no effort is known", () => {
   const result = buildCodexModelCatalog(nativeCatalog, [
     { id: "provider/simple-chat", context_length: 128000, output_modalities: ["text"] },
   ]);
   const routed = result.models.at(-1);
 
-  assert.equal(Object.hasOwn(routed, "supported_reasoning_levels"), false);
+  assert.deepEqual(routed.supported_reasoning_levels, []);
   assert.equal(Object.hasOwn(routed, "default_reasoning_level"), false);
 });
 
