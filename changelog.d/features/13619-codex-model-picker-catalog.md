@@ -1,0 +1,1 @@
+- **feat(cli):** `omniroute setup-codex --model-catalog` now merges compatible OmniRoute text models into Codex's native `model_catalog_json`, preserving bundled Codex entries while adding routed models to the normal picker ([#13619](https://github.com/diegosouzapw/OmniRoute/pull/13619))
