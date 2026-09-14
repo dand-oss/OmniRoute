@@ -168,7 +168,7 @@ function buildExternalModel(template, model, cfg, priority) {
     next.supported_reasoning_levels = levels;
     next.default_reasoning_level = cfg.effort || levels[0].effort;
   } else {
-    delete next.supported_reasoning_levels;
+    next.supported_reasoning_levels = [];
     delete next.default_reasoning_level;
   }
 
